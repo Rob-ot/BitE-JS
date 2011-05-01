@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>bitmap animation?</title>
+  <meta http-equiv="content-type" content="text/html;charset=utf-8">
+  <meta name="generator" content="Geany 0.19.1">
+  <style type='text/css'>
+    #sheet {
+      border:1px solid black;
+      display:block;
+      height:600px;
+      margin:0 auto;
+      width:1000px;
+    }
+    input[type=button] {
+      padding:3px;
+    }
+    #controls {
+      margin:0 auto;
+      width:500px;
+    }
+    #colorPicker {
+      cursor:pointer;
+      position:absolute;
+      right:10px;
+      top:40px;
+    }
+    #robot {
+      border-bottom:2px solid grey;
+      margin-bottom:5px;
+      padding-bottom:5px;
+      text-align:center;
+    }
+  </style>
+</head>
+
+<body>
+  <div id='robot'>Made by Rob Middletion - <a href='http://twitter.com/Rob__ot'>@Rob__ot</a> <a href='https://github.com/Rob-ot'>github</a></div>
+  <canvas id='sheet' width='1000' height='600'></canvas>
+  <div id='controls'>
+    <input type='button' id='addFrame' value='New Frame' title='Shortcut: n'>
+    <label><span>Copy from current </span><input type='checkbox' id='copyOnNew'></label>
+    <select id='frameList' title='Shortcut: left and right arrows'>
+      <option value='0'>Frame 0</option>
+    </select>
+    <br>
+    <input type='button' id='playPause' value='Play'>
+    <label><span>Play Speed</span><input type='range' id='playSpeed' value='10'></label>
+    <label><span>Repeat </span><input type='checkbox' id='repeat'></label>
+    <br>
+    <input type='button' id='load' value='Load raw data'>
+    <input type='button' id='save' value='Save'>
+    <textarea id='loadSaveArea'></textarea>
+    <br>
+    <input type='button' id='clear' value='Clear Everything'>
+    <br>
+    <span>Zoom</span>
+    <input type='button' id='zoomIn' value='+'>
+    <input type='button' id='zoomOut' value='-'>
+  </div>
+  <div id='colorPicker'></div>
+  <script src="../src/main.js"></script>
+</body>
+</html>
