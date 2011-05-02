@@ -20,199 +20,250 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-var colorPicker = (function (parent) {
-  var onPick,
-    colors = {
-      "white":   [255, 255, 255],
-      "silver":  [192, 192, 192],
-      "grey":    [128, 128, 128],
-      "black":   [  0,   0,   0],
-      "brown":   [159,  92,  43],
-      "red":     [255,   0,   0],
-      "maroon":  [128,   0,   0],
-      "orange":  [255, 165,   0],
-      "yellow":  [255, 255,   0],
-      "olive":   [128, 128,   0],
-      "lime":    [  0, 255,   0],
-      "green":   [  0, 128,   0],
-      "aqua":    [  0, 255, 255],
-      "teal":    [  0, 128, 128],
-      "blue":    [  0,   0, 255],
-      "navy":    [  0,   0, 128],
-      "fuchsia": [255,   0, 255],
-      "purple":  [128,   0, 128]
-    },
-    color,
-    colorElem
+(function (window) {
   
-  for (color in colors) {
-    if (colors.hasOwnProperty(color)) {
-      colorElem = document.createElement("div")
-      colorElem.className = "pickerColor"
-      colorElem.style.backgroundColor = color
-      colorElem.innerHTML = color
-      parent.appendChild(colorElem)
-    }
+  function exports (options) {
+    return new BE(options)
   }
   
-  parent.addEventListener("click", function (e) {
-    if (colors[e.target.style.backgroundColor] && onPick) {
-      onPick(colors[e.target.style.backgroundColor])
-    }
-  }, false)
-  
-  return {
-    "onPick": function (cb) {
-      onPick = cb
-    }
-  }
-  
-}(document.getElementById("colorPicker")))
-
-function Pixel (colors, x, y) {
-  this.outlined = false
-  this.x = x
-  this.y = y
-  this.colors = colors
-}
-
-Pixel.prototype.setColors = function (newColors) {
-  this.colors = newColors
-}
-Pixel.prototype.getColors = function () {
-  return this.colors
-}
-
-Pixel.prototype.setOutlined = function (outlined) {
-  this.outlined = outlined
-}
-Pixel.prototype.isOutlined = function () {
-  return this.outlined
-}
-
-Pixel.prototype.serialize = function () {
-  return [this.colors, this.x, this.y]
-}
-Pixel.prototype.fromSerialized = function (pix) {
-  this.colors = pix[0]
-  this.x = pix[1]
-  this.y = pix[2]
-}
-
-function Frame () {
-  this.pixels = []
-  this.blankTo(255, 255, 255)
-}
-
-Frame.prototype.setPixAt = function (x, y, color) {
-  this.pixels[x][y].setColors(color)
-}
-
-Frame.prototype.blankTo = function (r, g, b) {
-  var x, y
-  for (x = 0; x < 50; x++) {
-    if (! this.pixels[x]) {
-      this.pixels[x] = []
-    }
-    for (y = 0; y < 30; y++) {
-      this.pixels[x][y] = new Pixel([r, g, b], x, y)
-    }
-  }
-}
-
-Frame.prototype.serialize = function () {
-  var x, y, serials = []
-  for (x = 0; x < 50; x++) {
-    serials[x] = []
-    for (y = 0; y < 30; y++) {
-      serials[x][y] = this.pixels[x][y].serialize()
-    }
-  }
-  return serials
-}
-
-Frame.prototype.fromSerialized = function (frm) {
-  var x, y
-  for (x = 0; x < 50; x++) {
-    for (y = 0; y < 30; y++) {
-      this.pixels[x][y].fromSerialized(frm[x][y])
-    }
-  }
-}
-
-
-
-var drawrer = (function (canvas) {
-  var exports = {},
-    frames = [],
-    currentFrame,
-    viewSize = 20,
-    canvas2d = canvas.getContext("2d"),
-    currentColor = [0, 0, 0],
-    currentOutline,
-    onNewFrame = function () {},
-    onReset = function () {}
-  
-  function drawPix (x, y, colors) {
-    var pixel = frames[currentFrame].pixels[x][y]
-    canvas2d.fillStyle = "rgb(" + colors[0] + "," + colors[1] + "," + colors[2] + ")"
-    canvas2d.fillRect(x * viewSize, y * viewSize, viewSize, viewSize)
+  function BE (options) {
+    var self = this
     
-    if (pixel.isOutlined()) {
-      canvas2d.strokeStyle = "rgb(" + currentColor[0] + "," + currentColor[1] + "," + currentColor[2] + ")"
-      canvas2d.strokeRect(x * viewSize + 0.5, y * viewSize + 0.5, viewSize - 1, viewSize - 1)
+    this.events = {}
+    this.frames = []
+    this.mouseDown = false
+    this.viewSize = 20
+    this.currentColor = [0, 0, 0]
+    this.canvasOffsetTop = 0
+    this.canvasOffsetLeft = 0
+    this.lastDrawX = 0
+    this.lastDrawY = 0
+    this.currentFrame
+    this.currentOutline
+    
+    this.canvas = options.canvas
+    
+    this.canvasCtx = this.canvas.getContext("2d")
+    
+    this.reset()
+    
+    this.canvas.addEventListener("click", function (e) {
+      if (e.shiftKey) {
+        if (self.lastDrawX) {
+          self.setLine(self.lastDrawX, self.lastDrawY, e.pageX - self.canvasOffsetLeft, e.pageY - self.canvasOffsetTop)
+        }
+      }
+      else {
+        self.setPixAt(e.pageX - self.canvasOffsetLeft, e.pageY - self.canvasOffsetTop)
+        self.lastDrawX = e.pageX - self.canvasOffsetLeft
+        self.lastDrawY = e.pageY - self.canvasOffsetTop
+      }
+    }, false)
+    
+    this.canvas.addEventListener("mousedown", function (e) {
+      self.mouseDown = true
+      e.preventDefault()
+    }, false)
+    
+    document.addEventListener("mouseup", function (e) {
+      self.mouseDown = false
+    }, false)
+    
+    document.addEventListener("mouseout", function (e) {
+      if (e.target.tagName.toLowerCase() === "html") {
+        self.mouseDown = false
+      }
+    }, false)
+    
+    document.addEventListener("mousemove", function (e) {
+      if (self.mouseDown && e.target.id === "sheet") {
+        self.setPixAt(e.pageX - self.canvasOffsetLeft, e.pageY - self.canvasOffsetTop)
+        self.lastDrawX = e.pageX - self.canvasOffsetLeft
+        self.lastDrawY = e.pageY - self.canvasOffsetTop
+      }
+      self.setOutline(e.pageX - self.canvasOffsetLeft, e.pageY - self.canvasOffsetTop)
+    }, false)
+    
+    this.updateCanvasOffset = function () {
+      self.canvasOffsetTop = self.canvas.offsetTop + self.canvas.clientTop
+      self.canvasOffsetLeft = self.canvas.offsetLeft + self.canvas.clientLeft
     }
+    this.updateCanvasOffset()
+    window.addEventListener("resize", this.updateCanvasOffset, false)
   }
   
-  function write () {
-    var x, y, colors,
-      pixels = frames[currentFrame].pixels
+    
+  // A pixel is 1 box on 1 frame, not an actual screen pixel
+  function Pixel (colors, x, y) {
+    this.outlined = false
+    this.x = x
+    this.y = y
+    this.colors = colors
+  }
+
+  Pixel.prototype.setColors = function (newColors) {
+    this.colors = newColors
+  }
+  Pixel.prototype.getColors = function () {
+    return this.colors
+  }
+
+  Pixel.prototype.setOutlined = function (outlined) {
+    this.outlined = outlined
+  }
+  Pixel.prototype.isOutlined = function () {
+    return this.outlined
+  }
+
+  Pixel.prototype.serialize = function () {
+    return [this.colors, this.x, this.y]
+  }
+  Pixel.prototype.fromSerialized = function (pix) {
+    this.colors = pix[0]
+    this.x = pix[1]
+    this.y = pix[2]
+  }
+  
+  BE.prototype.Pixel = Pixel
+
+  
+  
+  function Frame () {
+    this.pixels = []
+    this.blankTo(255, 255, 255)
+  }
+
+  Frame.prototype.setPixAt = function (x, y, color) {
+    this.pixels[x][y].setColors(color)
+  }
+
+  Frame.prototype.blankTo = function (r, g, b) {
+    var x, y
+    for (x = 0; x < 50; x++) {
+      if (! this.pixels[x]) {
+        this.pixels[x] = []
+      }
+      for (y = 0; y < 30; y++) {
+        this.pixels[x][y] = new Pixel([r, g, b], x, y)
+      }
+    }
+  }
+
+  Frame.prototype.serialize = function () {
+    var x, y, serials = []
+    for (x = 0; x < 50; x++) {
+      serials[x] = []
+      for (y = 0; y < 30; y++) {
+        serials[x][y] = this.pixels[x][y].serialize()
+      }
+    }
+    return serials
+  }
+
+  Frame.prototype.fromSerialized = function (frm) {
+    var x, y
     for (x = 0; x < 50; x++) {
       for (y = 0; y < 30; y++) {
-        colors = pixels[x][y].getColors()
-        drawPix(x, y, colors)
+        this.pixels[x][y].fromSerialized(frm[x][y])
       }
     }
   }
   
-  function coordHasPix (x, y) {
+  BE.prototype.Frame = Frame
+  
+  
+  // bind a custom event
+  BE.prototype.bind = function (type, fn) {
+    if (! this.events[type]) this.events[type] = []
+    this.events[type].push(fn)
+    return this
+  }
+  
+  // trigger a custom event
+  BE.prototype.trigger = function (type, e) {
+    var fns = this.events[type]
+    if (fns) {
+      for (var i = 0; i < fns.length; i++) {
+        fns[i](e) // todo - add preventDefault and propogation
+      }
+    }
+    return this
+  }
+  
+  // unbind a custom event
+  BE.prototype.unbind = function (type, fn) {
+    var fns = this.events[type]
+    if (fns) {
+      for (var i = 0; i < fns.length; i++) {
+        if (fns[i] === fn) {
+          fns.splice(i, 1)
+          return true
+        }
+      }
+    }
+    return false
+  }
+  
+  BE.prototype.drawPix = function (x, y, colors) {
+    var pixel = this.frames[this.currentFrame].pixels[x][y]
+    this.canvasCtx.fillStyle = "rgb(" + colors[0] + "," + colors[1] + "," + colors[2] + ")"
+    this.canvasCtx.fillRect(x * this.viewSize, y * this.viewSize, this.viewSize, this.viewSize)
+    
+    if (pixel.isOutlined()) {
+      this.canvasCtx.strokeStyle = "rgb(" + this.currentColor[0] + "," + this.currentColor[1] + "," + this.currentColor[2] + ")"
+      this.canvasCtx.strokeRect(x * this.viewSize + 0.5, y * this.viewSize + 0.5, this.viewSize - 1, this.viewSize - 1)
+    }
+  }
+  
+  BE.prototype.write = function () {
+    var x, y, colors,
+      pixels = this.frames[this.currentFrame].pixels
+    for (x = 0; x < 50; x++) {
+      for (y = 0; y < 30; y++) {
+        colors = pixels[x][y].getColors()
+        this.drawPix(x, y, colors)
+      }
+    }
+  }
+  
+  BE.prototype.coordHasPix = function (x, y) {
     return (x >= 0 && y >= 0 && x < 50 && y < 30)
   }
   
-  exports.setPixAt = function (setX, setY) {
-    var x = Math.floor(setX / viewSize),
-      y = Math.floor(setY / viewSize)
-    if (! coordHasPix(x, y)) {
+  BE.prototype.setPixAt = function (setX, setY) {
+    var x = Math.floor(setX / this.viewSize),
+      y = Math.floor(setY / this.viewSize)
+    if (! this.coordHasPix(x, y)) {
       return
     }
-    frames[currentFrame].setPixAt(x, y, currentColor)
-    drawPix(x, y, currentColor)
+    this.frames[this.currentFrame].setPixAt(x, y, this.currentColor)
+    this.drawPix(x, y, this.currentColor)
   }
   
-  exports.setColor = function (color) {
-    currentColor = color
+  BE.prototype.setColor = function (color) {
+    this.currentColor = color
   }
   
-  exports.setOutline = function (setX, setY) {
+  BE.prototype.setOutline = function (setX, setY) {
     
-    var x = Math.floor(setX / viewSize),
-      y = Math.floor(setY / viewSize),
+    var x = Math.floor(setX / this.viewSize),
+      y = Math.floor(setY / this.viewSize),
       pixel
-    if (! coordHasPix(x, y)) {
+    if (! this.coordHasPix(x, y)) {
       return
     }
-    pixel = frames[currentFrame].pixels[x][y]
+    pixel = this.frames[this.currentFrame].pixels[x][y]
     
-    if (currentOutline) {
-      currentOutline.setOutlined(false)
-      drawPix(currentOutline.x, currentOutline.y, currentOutline.getColors())
+    if (this.currentOutline) {
+      this.currentOutline.setOutlined(false)
+      this.drawPix(this.currentOutline.x, this.currentOutline.y, this.currentOutline.getColors())
     }
-    currentOutline = pixel
+    this.currentOutline = pixel
     pixel.setOutlined(true)
-    drawPix(x, y, pixel.getColors())
+    this.drawPix(x, y, pixel.getColors())
   }
   
-  exports.setLine = function (lowX, lowY, highX, highY) {
+  BE.prototype.setLine = function (lowX, lowY, highX, highY) {
     /*
     var swap, x
     // since this can be in many directions we want to normalize the data
@@ -223,61 +274,53 @@ var drawrer = (function (canvas) {
     }
     
     for (x = lowX; x < highX; x++) {
-      exports.setPixAt(x, highY)
+      this.setPixAt(x, highY)
     }
     */
   }
   
-  exports.createFrame = function () {
-    var newId = frames.length
-    frames[newId] = new Frame()
-    onNewFrame(newId)
+  BE.prototype.createFrame = function () {
+    var newId = this.frames.length
+    this.frames[newId] = new Frame()
+    this.trigger("newFrame", {frame: this.frames[newId], frameId: newId})
     return newId
   }
   
-  exports.onNewFrame = function (cb) {
-    onNewFrame = cb
+  BE.prototype.reset = function () {
+    this.frames = []
+    this.trigger("reset")
+    this.setVisibleFrame(this.createFrame())
   }
   
-  exports.reset = function () {
-    frames = []
-    onReset()
-    exports.setVisibleFrame(exports.createFrame())
-  }
-  
-  exports.onReset = function (cb) {
-    onReset = cb
-  }
-  
-  exports.setVisibleFrame = function (frameId) {
+  BE.prototype.setVisibleFrame = function (frameId) {
     if (typeof frameId === "string") {
       if (frameId === "next") {
-        if (currentFrame + 1 < frames.length) {
-          currentFrame++
+        if (this.currentFrame + 1 < this.frames.length) {
+          this.currentFrame++
         }
       }
       else {
-        if (currentFrame - 1 >= 0) {
-          currentFrame--
+        if (this.currentFrame - 1 >= 0) {
+          this.currentFrame--
         }
       }
     }
     else {
-      currentFrame = frameId
+      this.currentFrame = frameId
     }
-    write()
-    return currentFrame
+    this.write()
+    return this.currentFrame
   }
   
-  exports.copyFrameTo = function (sourceFrameId, destFrameId) {
-    frames[destFrameId].fromSerialized(frames[sourceFrameId].serialize())
+  BE.prototype.copyFrameTo = function (sourceFrameId, destFrameId) {
+    this.frames[destFrameId].fromSerialized(this.frames[sourceFrameId].serialize())
   }
   
-  function frameDifference (fromFrameId, toFrameId) {
+  BE.prototype.frameDifference = function (fromFrameId, toFrameId) {
     var x, y, fromColors, toColors,
       differences = {},
-      fromFrame = frames[fromFrameId] || null,
-      toFrame = frames[toFrameId]
+      fromFrame = this.frames[fromFrameId] || null,
+      toFrame = this.frames[toFrameId]
     
     for (x = 0; x < 50; x++) {
       for (y = 0; y < 30; y++) {
@@ -297,15 +340,15 @@ var drawrer = (function (canvas) {
     return differences
   }
   
-  exports.getCompressedFrames = function () {
+  BE.prototype.getCompressedFrames = function () {
     var i, frameData = []
-    for (i = 0; i < frames.length; i++) {
-      frameData[i] = frameDifference(i - 1, i)
+    for (i = 0; i < this.frames.length; i++) {
+      frameData[i] = this.frameDifference(i - 1, i)
     }
     return frameData
   }
   
-  function pixMapToSerializedFrame (pixMap) {
+  BE.prototype.pixMapToSerializedFrame = function (pixMap) {
     var x, y, serials = []
     for (x = 0; x < 50; x++) {
       serials[x] = []
@@ -316,10 +359,10 @@ var drawrer = (function (canvas) {
     return serials
   }
   
-  exports.loadCompressedFrames = function (frameData) {
+  BE.prototype.loadCompressedFrames = function (frameData) {
     var i, x, y, frameState = []
     
-    exports.reset()
+    this.reset()
     
     // fill framestate with white for default frame
     for (x = 0; x < 50; x++) {
@@ -332,8 +375,8 @@ var drawrer = (function (canvas) {
     
     for (i = 0; i < frameData.length; i++) {
       // create a new frame if there isnt one
-      if (! frames[i]) {
-        exports.createFrame()
+      if (! this.frames[i]) {
+        this.createFrame()
       }
       // write current frame to default frame
       for (x in frameData[i]) {
@@ -346,203 +389,27 @@ var drawrer = (function (canvas) {
         }
       }
       // write framestate to corrosponding frame
-      frames[i].fromSerialized(pixMapToSerializedFrame(frameState))
+      this.frames[i].fromSerialized(this.pixMapToSerializedFrame(frameState))
     }
     // and refresh the current frame for good luck
-    write()
+    this.write()
   }
   
-  exports.getCurrentFrameId = function () {
-    return currentFrame
+  BE.prototype.getCurrentFrameId = function () {
+    return this.currentFrame
   }
   
-  exports.setSize = function (size) {
+  BE.prototype.setSize = function (size) {
     var w = size * 50,
       h = size * 30
-    viewSize = size
-    canvas.width = w
-    canvas.height = h
-    canvas.style.width = w + "px"
-    canvas.style.height = h + "px"
-    write()
+    this.viewSize = size
+    this.canvas.width = w
+    this.canvas.height = h
+    this.canvas.style.width = w + "px"
+    this.canvas.style.height = h + "px"
+    this.write()
   }
   
-  exports.reset()
-  
-  return exports
-}(document.getElementById("sheet")));
-
-(function () {
-  var canvas = document.getElementById("sheet"),
-    canvasOffsetTop,
-    canvasOffsetLeft,
-    addFrameBtn = document.getElementById("addFrame"),
-    copyOnNew = document.getElementById("copyOnNew"),
-    frameList = document.getElementById("frameList"),
-    playPause = document.getElementById("playPause"),
-    playSpeedElem = document.getElementById("playSpeed"),
-    repeatElem = document.getElementById("repeat"),
-    playingFrame = -1,
-    playTimeout = 1000 / parseInt(playSpeedElem.value, 10),
-    loadElem = document.getElementById("load"),
-    saveElem = document.getElementById("save"),
-    loadSaveArea = document.getElementById("loadSaveArea"),
-    clearElem = document.getElementById("clear"),
-    zoomIn = document.getElementById("zoomIn"),
-    zoomOut = document.getElementById("zoomOut"),
-    zoomLevel = 20,
-    mouseDown = false,
-    lastDrawX,
-    lastDrawY
-  
-  
-  colorPicker.onPick(drawrer.setColor)
-  
-  canvas.addEventListener("click", function (e) {
-    if (e.shiftKey) {
-      if (lastDrawX) {
-        drawrer.setLine(lastDrawX, lastDrawY, e.pageX - canvasOffsetLeft, e.pageY - canvasOffsetTop)
-      }
-    }
-    else {
-      drawrer.setPixAt(e.pageX - canvasOffsetLeft, e.pageY - canvasOffsetTop)
-      lastDrawX = e.pageX - canvasOffsetLeft
-      lastDrawY = e.pageY - canvasOffsetTop
-    }
-  }, false)
-  canvas.addEventListener("mousedown", function (e) {
-    mouseDown = true
-    e.preventDefault()
-  }, false)
-  document.addEventListener("mouseup", function (e) {
-    mouseDown = false
-  }, false)
-  document.addEventListener("mouseout", function (e) {
-    if (e.target.tagName.toLowerCase() === "html") {
-      mouseDown = false
-    }
-  }, false)
-  
-  document.addEventListener("mousemove", function (e) {
-    if (e.target.id === "sheet" && mouseDown) {
-      drawrer.setPixAt(e.pageX - canvasOffsetLeft, e.pageY - canvasOffsetTop)
-      lastDrawX = e.pageX - canvasOffsetLeft
-      lastDrawY = e.pageY - canvasOffsetTop
-    }
-    drawrer.setOutline(e.pageX - canvasOffsetLeft, e.pageY - canvasOffsetTop)
-  }, false)
-  
-  function addFrameToList (frameId) {
-    var newFrameListOption = document.createElement("option")
-    newFrameListOption.value = frameId
-    newFrameListOption.innerHTML = "Frame " + frameId
-    frameList.appendChild(newFrameListOption)
-    frameList.selectedIndex = frameId
-  }
-  drawrer.onNewFrame(addFrameToList)
-  
-  function clearFrameList () {
-    frameList.innerHTML = ""
-  }
-  drawrer.onReset(clearFrameList)
-  
-  function addFrame (e) {
-    var oldFrameId = drawrer.getCurrentFrameId(),
-      newFrameId = drawrer.createFrame(),
-      copyCurrent = copyOnNew.checked
-    copyCurrent && drawrer.copyFrameTo(oldFrameId, newFrameId)
-    drawrer.setVisibleFrame(newFrameId)
-  }
-  addFrameBtn.addEventListener("click", addFrame, false)
-  frameList.addEventListener("change", function (e) {
-    drawrer.setVisibleFrame(frameList.selectedIndex)
-  }, false)
-  
-  document.addEventListener("keyup", function (e) {
-    // left arrow
-    if (e.keyCode === 37) {
-      frameList.selectedIndex = drawrer.setVisibleFrame("prev")
-    }
-    // right arrow
-    else if (e.keyCode === 39) {
-      frameList.selectedIndex = drawrer.setVisibleFrame("next")
-    }
-    else if (e.keyCode === 78) {
-      addFrame()
-    }
-  }, false)
-  
-  function nextFrame () {
-    var newFrame
-    if (playingFrame !== -1) {
-      newFrame = drawrer.setVisibleFrame("next")
-      if (playingFrame !== newFrame) {
-        frameList.selectedIndex = newFrame
-        playingFrame = newFrame
-        setTimeout(nextFrame, playTimeout)
-      }
-      else {
-        if (repeatElem.checked) {
-          playingFrame = 0
-          drawrer.setVisibleFrame(0)
-          setTimeout(nextFrame, playTimeout)
-        }
-        else {
-          playingFrame = -1
-        }
-      }
-    }
-  }
-  
-  playPause.addEventListener("click", function (e) {
-    if (playingFrame === -1) {
-      playingFrame = 0
-      drawrer.setVisibleFrame(0)
-      setTimeout(nextFrame, playTimeout)
-    }
-    else {
-      playingFrame = -1
-    }
-  }, false)
-  
-  playSpeedElem.addEventListener("change", function (e) {
-    playTimeout = 1000 / parseInt(e.target.value, 10)
-    if (playTimeout === Infinity) {
-      playTimeout = 1000
-    }
-  }, false)
-  
-  saveElem.addEventListener("click", function (e) {
-    var json = JSON.stringify(drawrer.getCompressedFrames())
-    loadSaveArea.value = json
-    loadSaveArea.select()
-  }, false)
-  loadElem.addEventListener("click", function (e) {
-    drawrer.loadCompressedFrames(JSON.parse(loadSaveArea.value))
-  }, false)
-  
-  clearElem.addEventListener("click", function (e) {
-    if (confirm("You want to delete EVERYTHING (including the text area)?")) {
-      drawrer.reset()
-      loadSaveArea.value = ""
-    }
-  }, false)
-  
-  function updateCanvasOffset () {
-    canvasOffsetTop = canvas.offsetTop + canvas.clientTop
-    canvasOffsetLeft = canvas.offsetLeft + canvas.clientLeft
-  }
-  updateCanvasOffset()
-  window.addEventListener("resize", updateCanvasOffset, false)
-  zoomIn.addEventListener("click", function (e) {
-    zoomLevel < 100 && (zoomLevel++)
-    drawrer.setSize(zoomLevel)
-    updateCanvasOffset()
-  }, false)
-  zoomOut.addEventListener("click", function (e) {
-    zoomLevel > 1 && (zoomLevel--)
-    drawrer.setSize(zoomLevel)
-    updateCanvasOffset()
-  }, false)
-  
-}());
+  exports.fn = BE.prototype
+  window.BitE = exports
+}(window));

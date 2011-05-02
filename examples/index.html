@@ -59,6 +59,18 @@
     <input type='button' id='zoomOut' value='-'>
   </div>
   <div id='colorPicker'></div>
+  
   <script src="../src/main.js"></script>
+  <script src="../lib/colorPicker.js"></script>
+  <script src="../lib/basicControls.js"></script>
+  <script>
+    
+    var editor = BitE({
+      canvas: document.getElementById("sheet")
+    })
+    .colorPicker(document.getElementById("colorPicker"))
+    .basicControls()
+    
+  </script>
 </body>
 </html>
